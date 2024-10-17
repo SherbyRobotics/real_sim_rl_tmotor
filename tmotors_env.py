@@ -104,9 +104,9 @@ class TMotorsEnv(gym.Env):
         thdot = self._node.joint_state[1]
 
         g = 10.0
-        m = 1.2
-        l = 0.39
-        max_torque = 1.0
+        m = self.m
+        l = self.l
+        max_torque = self.max_torque
         q = 30.0
 
         u = np.clip(u, -max_torque, max_torque)[0]
@@ -156,8 +156,6 @@ if __name__ == "__main__":
 
     # model.save("sac_pendulum_v41")
 
-    env.reset()
-    env.set_joints(np.pi/2)
 
     theta = np.linspace(-np.pi, np.pi, 100)
     theta_dot = np.linspace(-10, 10, 100)

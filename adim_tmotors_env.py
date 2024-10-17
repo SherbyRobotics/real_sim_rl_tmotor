@@ -17,7 +17,7 @@ class TMotorsEnv(gym.Env):
 
     def __init__(self, render_mode=None):
         self.observation_space = gym.spaces.Box(np.array([-1, -1, -8]), np.array([1, 1, 8]))
-        self.action_space = gym.spaces.Box(-1, 1)
+        self.action_space = gym.spaces.Box(-2, 2)
         self._target = np.array([1, 0])
 
         rclpy.init()
@@ -28,6 +28,10 @@ class TMotorsEnv(gym.Env):
         self.step_count = 0
 
         self.render_mode = render_mode
+
+        self.m = 1.0
+        self.l = 1.0
+        self.max_torque = 2.0
 
     def _get_obs(self):
         y = np.cos(self._node.joint_state[0])
@@ -75,34 +79,20 @@ class TMotorsEnv(gym.Env):
 
     def step(self, action):
 
-
-        # th, thdot = self.state  # th := theta
-
-        # g = self.g
-        # m = self.m
-        # l = self.l
-        # dt = self.dt
-
-        # th_s = th
-        # thdot_s = thdot #/ np.sqrt(1 / l)
-        # u = u_s * (m * l)
-        # q_s = self.q / (m * l)
-        # max_torque_s = self.max_torque #* (m * l)
-        # # dt_s = dt / np.sqrt(m * l **2 / self.max_torque)
-        # dt_s = dt * np.sqrt(1 / l)
-        
-        # u = np.clip(u, -max_torque_s, max_torque_s)[0]
-
         g = 10.0
-        m = 1.0
-        l = 0.4
+        m = self.m
+        l = self.l
 
-        tau = action[0] #* m * l
+        tau = action[0] * m * l                            # scale torque
+        max_torque_s = self.max_torque * m * l             # scale max torque
+        tau = np.clip(tau, -max_torque_s, max_torque_s)
+
         self._apply_torque(float(tau))
         time.sleep(0.05)  # TODO: remove hardcode
         obs = self._get_obs()
         info = self._get_info()
 
+        obs[2] = obs[2] / np.sqrt(1 / l)                   # normalize theta_dot
 
 
         th = self._node.joint_state[0]
@@ -129,12 +119,12 @@ class TMotorsEnv(gym.Env):
         thdot = self._node.joint_state[1]
 
         g = 10.0
-        m = 1.2
-        l = 0.39
-        max_torque = 1.0
+        m = self.m
+        l = self.l
+        max_torque = self.max_torque
         q = 30.0
 
-        u = np.clip(u, -max_torque, max_torque)[0]
+        u = np.clip(u, -max_torque, max_torque)
 
         th_s = th
         thdot_s = thdot / np.sqrt(g / l)
@@ -161,9 +151,13 @@ if __name__ == "__main__":
     from stable_baselines3.common.logger import configure
 
     env = TMotorsEnv(render_mode="ansi")
+    env.max_torque = 2.0
+    env.l = 0.45
+    env.m = 2*0.05 + 0.368 + 0.07
+
     env = gym.wrappers.TimeLimit(env, max_episode_steps=200) #200
 
-    model = SAC.load("sac_pendulum", env=env)
+    model = SAC.load("sac_pendulum_adim", env=env)
 
     # print("Training...")
     # model = SAC("MlpPolicy", env, verbose=1, use_sde=True)

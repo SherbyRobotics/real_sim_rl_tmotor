@@ -97,7 +97,7 @@ env = modified_pendulum()
 env.action_space = gym.spaces.Box(low=-1, high=1, shape=(1,))
 
 env.max_speed = 10
-env.max_torque = 1
+env.max_torque = 0.5
 # env.l = 0.42
 # env.m = 0.8
 env.l = 0.45
@@ -105,11 +105,11 @@ env.m = 2*0.05 + 0.368 + 0.07
 env.dt = 0.05
 print(env.m, env.l)
 
-model = SAC("MlpPolicy", env, verbose=1)
-# model = SAC.load("sac_pendulum", env=env)
-model.learn(total_timesteps=10000)
+# model = SAC("MlpPolicy", env, verbose=1)
+# # model = SAC.load("sac_pendulum", env=env)
+# model.learn(total_timesteps=30000)
 
-model.save("sac_pendulum")
+# model.save("sac_pendulum")
 
 model = SAC.load("sac_pendulum", env=env)
 
