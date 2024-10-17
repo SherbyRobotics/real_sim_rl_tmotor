@@ -42,7 +42,7 @@ class TMotorsEnv(gym.Env):
     def _enable_motors(self):
         self._node.send_cmd(EnableCmd())
 
-    def set_joints(self, position):
+    def _set_joints(self, position):
         self._node.send_cmd(PositionCmd(position))
 
     def _apply_torque(self, tau):
@@ -74,11 +74,36 @@ class TMotorsEnv(gym.Env):
         return obs, info
 
     def step(self, action):
-        tau = action[0]
+
+
+        # th, thdot = self.state  # th := theta
+
+        # g = self.g
+        # m = self.m
+        # l = self.l
+        # dt = self.dt
+
+        # th_s = th
+        # thdot_s = thdot #/ np.sqrt(1 / l)
+        # u = u_s * (m * l)
+        # q_s = self.q / (m * l)
+        # max_torque_s = self.max_torque #* (m * l)
+        # # dt_s = dt / np.sqrt(m * l **2 / self.max_torque)
+        # dt_s = dt * np.sqrt(1 / l)
+        
+        # u = np.clip(u, -max_torque_s, max_torque_s)[0]
+
+        g = 10.0
+        m = 1.0
+        l = 0.4
+
+        tau = action[0] #* m * l
         self._apply_torque(float(tau))
         time.sleep(0.05)  # TODO: remove hardcode
         obs = self._get_obs()
         info = self._get_info()
+
+
 
         th = self._node.joint_state[0]
         thdot = self._node.joint_state[1]
@@ -97,7 +122,7 @@ class TMotorsEnv(gym.Env):
             print()
             self.step_count += 1
 
-        return obs, reward, terminated, truncated, self._node.joint_state[0]
+        return obs, reward, terminated, truncated, info
     
     def dimensionless_cost(self, u):
         th = self._node.joint_state[0]
@@ -156,9 +181,6 @@ if __name__ == "__main__":
 
     # model.save("sac_pendulum_v41")
 
-    env.reset()
-    env.set_joints(np.pi/2)
-
     theta = np.linspace(-np.pi, np.pi, 100)
     theta_dot = np.linspace(-10, 10, 100)
 
@@ -180,23 +202,19 @@ if __name__ == "__main__":
     plt.show()
 
     ep_reward = 0
-    n_steps = 250
+    n_steps = 200
 
     while True:
         obs , info = env.reset()
         for _ in range(n_steps):
             action, _states = model.predict(obs, deterministic=True)
             print("action", action)
-            obs, rewards, terminated, truncated, th = env.step(action)
+            obs, rewards, terminated, truncated, info = env.step(action)
 
             reward = env.dimensionless_cost(action)
             # VecEnv resets automatically
             ep_reward += reward
             #vec_env.render("human")
-            print(th)
-            if abs(th) > np.pi*4:
-                break
-            
 
         print("Episode reward:", ep_reward/n_steps * 100)
         ep_reward = 0
