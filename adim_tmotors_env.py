@@ -17,7 +17,7 @@ class TMotorsEnv(gym.Env):
 
     def __init__(self, render_mode=None):
         self.observation_space = gym.spaces.Box(np.array([-1, -1, -8]), np.array([1, 1, 8]))
-        self.action_space = gym.spaces.Box(-2, 2)
+        self.action_space = gym.spaces.Box(-4, 4)
         self._target = np.array([1, 0])
 
         rclpy.init()
@@ -65,7 +65,7 @@ class TMotorsEnv(gym.Env):
             print("Reset")
 
         self._apply_torque(0.0)
-        time.sleep(3)  # TODO: remove hardcode
+        time.sleep(5)  # TODO: remove hardcode
         self._enable_motors()
         time.sleep(5) 
 
@@ -151,9 +151,9 @@ if __name__ == "__main__":
     from stable_baselines3.common.logger import configure
 
     env = TMotorsEnv(render_mode="ansi")
-    env.max_torque = 2.0
+    env.max_torque = 4.0
     env.l = 0.45
-    env.m = 2*0.05 + 0.368 + 0.07
+    env.m = 2*0.05 + 0.368 + 0.07 + 0.380
 
     env = gym.wrappers.TimeLimit(env, max_episode_steps=200) #200
 
@@ -202,7 +202,7 @@ if __name__ == "__main__":
         obs , info = env.reset()
         for _ in range(n_steps):
             action, _states = model.predict(obs, deterministic=True)
-            print("action", action)
+            print("action", action * env.m * env.l )
             obs, rewards, terminated, truncated, info = env.step(action)
 
             reward = env.dimensionless_cost(action)

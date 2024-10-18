@@ -27,6 +27,8 @@ class modified_pendulum(PendulumEnv):
         self.l1 = 0.39
         self.l2 = 0.26
 
+        self.prev_u = 0.0
+
     # def step(self, u_s):
     #     th, thdot = self.state  # th := theta
 
@@ -82,18 +84,20 @@ class modified_pendulum(PendulumEnv):
         
         u = np.clip(u, -max_torque_s, max_torque_s)[0]
         # add noise to the action
-        u += np.random.normal(0, 0.03)
+        # u += np.random.normal(0, 0.03)
         # add noise to the state
-        th += np.random.normal(0, 0.001)
+        # th += np.random.normal(0, 0.001)
 
         self.last_u = u  # for rendering
         costs = (angle_normalize(th_s) ** 2 + 0.3 * thdot_s**2 + 0.001 * (u_s**2) ) #* dt_s
 
         I = m * l ** 2  # inertia
 
-        newthdot = thdot + ( g / l * np.sin(th) + u / I ) * dt
+        newthdot = thdot + ( g / l * np.sin(th) + self.prev_u / I ) * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
         newth = th + newthdot * dt
+
+        self.prev_u = u
 
         # dimensionless states
         newth_s = newth
@@ -143,21 +147,21 @@ class modified_pendulum(PendulumEnv):
 # create the environment
 
 env = modified_pendulum()
-env.action_space = gym.spaces.Box(low=-2, high=2, shape=(1,))
+env.action_space = gym.spaces.Box(low=-4, high=4, shape=(1,))
 
 env.max_speed = 10
-env.max_torque = 2.0
+env.max_torque = 4.0
 env.l = 0.5
 env.m = 1.0
 env.dt = 0.05
 
 env = gym.wrappers.TimeLimit(env, max_episode_steps=200) #200
 
-model = SAC("MlpPolicy", env, verbose=1)
-# model = SAC.load("sac_pendulum_adim", env=env)
-model.learn(total_timesteps=10000)
+# model = SAC("MlpPolicy", env, verbose=1)
+# # model = SAC.load("sac_pendulum_adim", env=env)
+# model.learn(total_timesteps=10000)
 
-model.save("sac_pendulum_adim")
+# model.save("sac_pendulum_adim")
 
 model = SAC.load("sac_pendulum_adim", env=env)
 

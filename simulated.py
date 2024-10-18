@@ -27,6 +27,8 @@ class modified_pendulum(PendulumEnv):
         self.l1 = 0.39
         self.l2 = 0.26
 
+        self.prev_u = 0.0
+
     def step(self, u):
         th, thdot = self.state  # th := theta
 
@@ -43,14 +45,17 @@ class modified_pendulum(PendulumEnv):
         th += np.random.normal(0, 0.0001)
 
         self.last_u = u  # for rendering
+
         costs = angle_normalize(th) ** 2 + 0.1 * thdot**2 + 0.001 * (u**2)
 
         I = self.m * self.l ** 2  # inertia
         # I = 0.5 * self.m1 * self.r1**2 + self.m2  * (self.l1**3 + self.l2**3) / (3 * (self.l1 + self.l2)) + self.m3 * self.l1**2 # inertia 
 
-        newthdot = thdot + ( g / l * np.sin(th) + u / I ) * dt
+        newthdot = thdot + ( g / l * np.sin(th) + self.prev_u / I ) * dt
         newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
         newth = th + newthdot * dt
+
+        self.prev_u = u
 
         self.state = np.array([newth, newthdot])
 
@@ -80,13 +85,13 @@ class modified_pendulum(PendulumEnv):
 
     
 
-    def reset(self, seed=None):
-        super().reset(seed=seed)
+    # def reset(self, seed=None):
+    #     super().reset(seed=seed)
         
-        self.state = np.array([np.pi, 0])
+    #     self.state = np.array([np.pi, 0])
 
-        obs = self._get_obs()
-        return obs, {}
+    #     obs = self._get_obs()
+    #     return obs, {}
     
 
 
@@ -97,7 +102,7 @@ env = modified_pendulum()
 env.action_space = gym.spaces.Box(low=-1, high=1, shape=(1,))
 
 env.max_speed = 10
-env.max_torque = 0.5
+env.max_torque = 1.0
 # env.l = 0.42
 # env.m = 0.8
 env.l = 0.45
@@ -105,11 +110,11 @@ env.m = 2*0.05 + 0.368 + 0.07
 env.dt = 0.05
 print(env.m, env.l)
 
-# model = SAC("MlpPolicy", env, verbose=1)
-# # model = SAC.load("sac_pendulum", env=env)
-# model.learn(total_timesteps=30000)
+model = SAC("MlpPolicy", env, verbose=1)
+# model = SAC.load("sac_pendulum", env=env)
+model.learn(total_timesteps=10000)
 
-# model.save("sac_pendulum")
+model.save("sac_pendulum")
 
 model = SAC.load("sac_pendulum", env=env)
 

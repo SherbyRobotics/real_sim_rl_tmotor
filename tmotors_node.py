@@ -29,6 +29,12 @@ class TMotorsNode(Node):
         self.joint_state[1] = msg.velocity[id]
         self.joint_state[2] = msg.effort[id]
 
+        # add a low pass filter to the sensor data
+        # self.joint_state[0] = 0.9 * self.joint_state[0] + 0.1 * (msg.position[id] + np.pi)
+        # self.joint_state[1] = 0.9 * self.joint_state[1] + 0.1 * msg.velocity[id]
+        # self.joint_state[2] = 0.9 * self.joint_state[2] + 0.1 * msg.effort[id]
+
+
     def send_cmd(self, cmd):
         msg = JointState()
 

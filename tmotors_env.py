@@ -104,9 +104,9 @@ class TMotorsEnv(gym.Env):
         thdot = self._node.joint_state[1]
 
         g = 10.0
-        m = self.m
-        l = self.l
-        max_torque = self.max_torque
+        m = 1.0
+        l = 0.5
+        max_torque = 2.0
         q = 30.0
 
         u = np.clip(u, -max_torque, max_torque)[0]
