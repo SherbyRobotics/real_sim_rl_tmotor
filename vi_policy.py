@@ -83,7 +83,8 @@ class CustomCostFunction( costfunction.CostFunction ):
         
         # Delta values with respect to nominal values
         dx = x - self.xbar
-        dx[0] = angle_normalize(dx[0] + np.pi)
+
+        dx[0] = angle_normalize(dx[0]) #+ np.pi
         
         # Quadratic terminal cost
         J_f = np.dot( dx.T , np.dot(  self.S , dx ) )
@@ -124,7 +125,7 @@ class CustomCostFunction( costfunction.CostFunction ):
         dx = x - self.xbar
         du = u - self.ubar
         
-        dx[0] = angle_normalize(dx[0] + np.pi)
+        dx[0] = angle_normalize(dx[0])
         
         dJ = ( np.dot( dx.T , np.dot(  self.Q , dx ) ) +
                np.dot( du.T , np.dot(  self.R , du ) ) )
@@ -136,68 +137,245 @@ class CustomCostFunction( costfunction.CostFunction ):
         
         return dJ
 
-sys  = pendulum.SinglePendulum()
 
-sys.x_ub = np.array([+np.pi, +10])
-sys.x_lb = np.array([-np.pi,  -10])
-sys.u_ub = np.array([1])
-sys.u_lb = np.array([-1])
-sys.m1 = 1.0
-sys.lc1 = 0.4
-sys.I1 = 0
+
+
+import gymnasium as gym
+from gymnasium.spaces import Box
+from gymnasium.envs.classic_control.pendulum import PendulumEnv
+
+class modifiedPendulum(PendulumEnv):
+
+    def step(self, u):
+        th, thdot = self.state  # th := theta
+
+        g = self.g
+        m = self.m
+        l = self.l
+        dt = self.dt
+
+        u = u*self.max_torque
+
+        u = np.clip(u, -self.max_torque, self.max_torque)[0]
+        self.last_u = u  # for rendering
+        costs = angle_normalize(th) ** 2 + 0.1 * thdot**2 + 0.001 * (u**2)
+
+        newthdot = thdot + (g / l * np.sin(th) + u / (m * l**2)) * dt
+        newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
+        newth = th + newthdot * dt
+
+        self.state = np.array([newth, newthdot])
+
+        if self.render_mode == "human":
+            self.render()
+        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
+        return self._get_obs(), -costs, False, False, self.state
+    
+    def reset(self, seed=None):
+        super().reset(seed=seed)
+        
+        self.state = np.array([np.pi, 0])
+
+        obs = self._get_obs(), self.state
+        return obs, {}
+
+
+
+def step_sys(self, x, u, t=0):
+        th = x[0]
+        thdot = x[1]
+        
+        u = u*self.max_torque
+
+        g = self.g
+        m = self.m1
+        l = self.lc1
+        dt = self.dt
+
+        u = np.clip(u, -self.max_torque, self.max_torque)[0]
+
+        dx = np.zeros(len(x))
+
+        dx[1] = (g / l * np.sin(th) + u / (m * l**2))
+        dx[0] = thdot + dx[1] * dt
+
+        return dx
+
+
+def trig(self, q ):
+    """ Compute cos and sin """
+    q = q + np.pi
+    
+    c1  = np.cos( q )
+    s1  = np.sin( q )
+
+    return [c1,s1]
+
+pendulum.SinglePendulum.trig = trig
+pendulum.SinglePendulum.f = step_sys
+
+sys = pendulum.SinglePendulum()
+
+m = 1.0
+l = 1.0
+max_torque = 4.0
+dt = 0.05
+
+# m_array = np.linspace(0.5, 4.0, 3)
+# max_torque_array = m_array * 4.0
+
+# for max_torque in max_torque_array:
+#     for m in m_array:
+        
+#         print('m = ', m, ' max_torque = ', max_torque)
+
+sys.x_ub = np.array([+4*np.pi, +10])
+sys.x_lb = np.array([-4*np.pi,  -10])
+sys.u_ub = np.array([1.0])
+sys.u_lb = np.array([-1.0])
+sys.m1 = m
+sys.lc1 = l
+sys.l1 = 1.0
+sys.I1 = 0.0
+
+sys.g = 9.81
+sys.dt = dt
+sys.max_torque = max_torque
+
 
 # Discrete world 
-grid_sys = discretizer.GridDynamicSystem( sys , [201,201] , [21] )
+grid_sys = discretizer.GridDynamicSystem( sys , [201,201] , [41] )
+grid_sys.dt = dt
 
 
-
-# Cost Function
+# Cost Function 
 qcf = CustomCostFunction(2, 1)
 
-qcf.xbar = np.array([ 0 , 0 ]) # target
-qcf.INF  = 500
+qcf.xbar = np.array([ 0., 0. ]) # target
 
 qcf.Q[0,0] = 1.0
 qcf.Q[1,1] = 0.1
-qcf.R[0,0] = 0.001
+qcf.R[0,0] = 0.001 
 
 qcf.S[0,0] = 10.0
-qcf.S[1,1] = 10.0
+qcf.S[1,1] = 1.0
 
 
 
 # DP algo
 dp = dynamicprogramming.DynamicProgrammingWithLookUpTable( grid_sys, qcf)
-#dp = dprog.DynamicProgramming2DRectBivariateSpline(grid_sys, qcf)
 
-#dp.solve_bellman_equation( animate_cost2go = True )
+dp.solve_bellman_equation( animate_cost2go = False, tol = 0.4)
 
-dp.compute_steps(200)
-# dp.plot_policy()
-
-#dp.solve_bellman_equation( tol = 1)
-# dp.solve_bellman_equation( tol = 0.1 , animate_cost2go = True )
-# dp.solve_bellman_equation( tol = 1 , animate_policy = True )
-#dp.plot_cost2go(150)
-
-#dp.animate_cost2go( show = False , save = True )
-#dp.animate_policy( show = False , save = True )
 
 dp.clean_infeasible_set()
-dp.plot_cost2go_3D()
-dp.plot_policy()
+# dp.plot_cost2go_3D()
+# dp.plot_policy()
 
 ctl = dp.get_lookup_table_controller()
-# print(ctl)
+cl_sys = ctl + sys
 
 
-U = ctl.plot_control_law( sys = sys , n = 100)
-np.save('vi_policy_real', U)
+env = modifiedPendulum(render_mode="human")
+env.unwrapped.m = m
+env.unwrapped.l = l
+# env.unwrapped.max_speed = 1000
+env.unwrapped.g = 9.81
+env.unwrapped.max_torque = max_torque*l
+env.unwrapped.dt = dt #* np.sqrt(l)
+env.unwrapped.observation_space = Box(np.array([-1., -1., -10.]), np.array([1., 1., 10.]), (3,), dtype=np.float64)
+env.unwrapped.action_space = Box(low=-max_torque, high=max_torque, shape=(1,), dtype=np.float64)
+
+states_array = []
+actions_array = []
+
+sys_states_array = np.array([np.pi, 0.])
+sys_actions_array = []
+
+
+# while True:
+obs, states = env.reset()[0]
+x = np.array([np.pi, 0.0])
+
+J = 0
+
+for i in range(200):
+
+    # obs = np.array(obs).squeeze()
+    # states = np.array([np.arctan2(obs[1],obs[0]), obs[2]])
+    # action = np.array([[2.0]])
+    action = ctl.lookup_table_selection(states)
+    # print(action, ' -- ', states)
+    # states[1] = states[1] / np.sqrt(l)
+    obs, _, _, _, states = env.step(action)
+    # states[1] = states[1] * np.sqrt(l)  
+    states_array.append(states)
+    actions_array.append(action)
+
+    J += 1.0 * angle_normalize(states[0])**2 + 0.1 * states[1]**2 + 0.001*(action*max_torque)**2
+
+    # dx = cl_sys.plant.f(x, action, t=0)
+    # x[0] = x[0] + dx[0]*dt
+    # x[1] = dx[0]
+    # # print(x)
+    # sys_states_array = np.vstack((sys_states_array, x))
+
+print(J/200)
+
+
+# theta = np.linspace(-2*np.pi, 2*np.pi, 100)
+# theta_dot = np.linspace(-4, 4, 100)
+
+# X, Y = np.meshgrid(theta, theta_dot)
+
+# Z = np.zeros_like(X)
+# for i in range(len(X)):
+#     for j in range(len(Y)):
+#         states = np.array([X[i, j], Y[i, j]])
+#         Z[i, j] = ctl.lookup_table_selection(states)
+
+# # plot heatmap of the value function
+# plt.figure()
+# plt.pcolormesh(X, Y, Z, shading='auto')
+# plt.xlabel("theta")
+# plt.ylabel("theta_dot")
+# plt.colorbar()
+# plt.show()
+
+
+plt.figure()
+states_array = np.array(states_array)
+ax = plt.subplot(311)
+ax.plot(states_array[:,0])
+ax.set_title('theta')
+ax = plt.subplot(312)
+ax.plot(states_array[:,1])
+ax.set_title('theta_dot')
+ax = plt.subplot(313)
+ax.plot(actions_array)
+ax.set_title('actions')
+plt.suptitle('m = ' + str(m) + ' max_torque = ' + str(max_torque))
+# plt.show()
+
+# plt.figure()
+# sys_states_array = np.array(sys_states_array).T
+# print(sys_states_array.shape)
+# ax = plt.subplot(311)
+# ax.plot(sys_states_array[0])
+# ax.set_title('theta')
+# ax = plt.subplot(312)
+# ax.plot(sys_states_array[1])
+# ax.set_title('theta_dot')
+# ax = plt.subplot(313)
+# ax.plot(actions_array)
+# ax.set_title('actions')
+
+
 
 #asign controller
-cl_sys = ctl + sys
-cl_sys.x0   = np.array([0., 0.])
-cl_sys.compute_trajectory( 10, 10001, 'euler')
+# cl_sys = ctl + sys
+cl_sys.x0   = np.array([np.pi, 0.])
+cl_sys.compute_trajectory( 10, 201, 'euler')
 cl_sys.plot_trajectory('xu')
-cl_sys.plot_phase_plane_trajectory()
-cl_sys.animate_simulation()
+# cl_sys.plot_phase_plane_trajectory()
+# cl_sys.animate_simulation()

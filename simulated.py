@@ -37,12 +37,16 @@ class modified_pendulum(PendulumEnv):
         l = self.l
         dt = self.dt
 
-        u = np.clip(u, -self.max_torque, self.max_torque)[0]
-        # add noise to the action
-        u += np.random.normal(0, 0.03)
-        # add noise to the state
-        # thdot += np.random.normal(0, 0.01)
-        th += np.random.normal(0, 0.0001)
+        thdot = thdot 
+        
+        max_torque = self.max_torque
+        u = u * max_torque
+        u = np.clip(u, -max_torque, max_torque)[0]
+        # # add noise to the action
+        # u += np.random.normal(0, 0.03)
+        # # add noise to the state
+        # # thdot += np.random.normal(0, 0.01)
+        # th += np.random.normal(0, 0.0001)
 
         self.last_u = u  # for rendering
 
@@ -51,8 +55,10 @@ class modified_pendulum(PendulumEnv):
         I = self.m * self.l ** 2  # inertia
         # I = 0.5 * self.m1 * self.r1**2 + self.m2  * (self.l1**3 + self.l2**3) / (3 * (self.l1 + self.l2)) + self.m3 * self.l1**2 # inertia 
 
-        newthdot = thdot + ( g / l * np.sin(th) + self.prev_u / I ) * dt
-        newthdot = np.clip(newthdot, -self.max_speed, self.max_speed)
+        # self.prev_u = u
+
+        newthdot = thdot + ( g / l * np.sin(th) + self.prev_u / I ) * dt 
+        newthdot = np.clip(newthdot, -self.max_speed, self.max_speed) 
         newth = th + newthdot * dt
 
         self.prev_u = u
@@ -63,7 +69,7 @@ class modified_pendulum(PendulumEnv):
             self.render()
 
         truncation = abs(th) > np.pi*6
-        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
+        # truncation=False #as the time limit is handled by the `TimeLimit` wrapper added during `make`
         return self._get_obs(), -costs, False, truncation, {}
     
     def dimensionless_cost(self, u):
@@ -76,11 +82,12 @@ class modified_pendulum(PendulumEnv):
         u = np.clip(u, -self.max_torque, self.max_torque)[0]
 
         th_s = th
-        thdot_s = thdot / np.sqrt(g / l)
-        u_s = u / (m * g * l)
-        q_s = self.q / (m * g * l)
+        thdot_s = thdot
+        u_s = u 
 
-        costs = 1 - (q_s **2 * angle_normalize(th_s) ** 2 + (u_s**2)) / (q_s **2 * np.pi ** 2)
+        # costs = 1 - (q_s **2 * angle_normalize(th_s) ** 2 + (u_s**2)) / (q_s **2 * np.pi ** 2)
+
+        costs = 1 - (angle_normalize(th_s) ** 2 + 0.1 * thdot_s**2 + 0.001 * (u_s**2)) / (np.pi ** 2)# * np.sqrt(1/l)
         return costs
 
     
@@ -101,13 +108,17 @@ class modified_pendulum(PendulumEnv):
 env = modified_pendulum()
 env.action_space = gym.spaces.Box(low=-1, high=1, shape=(1,))
 
-env.max_speed = 10
-env.max_torque = 1.0
+env.max_speed = 1000
+max_torque = 4.0
 # env.l = 0.42
 # env.m = 0.8
-env.l = 0.45
-env.m = 2*0.05 + 0.368 + 0.07
-env.dt = 0.05
+env.l = 0.37
+env.m = 1.0
+env.dt = 0.015
+env.max_torque = max_torque * env.l * env.m
+
+# env.unwrapped.fac = 20.
+# env.unwrapped.max_torque = 3.11111
 print(env.m, env.l)
 
 model = SAC("MlpPolicy", env, verbose=1)
@@ -118,11 +129,11 @@ model.save("sac_pendulum")
 
 model = SAC.load("sac_pendulum", env=env)
 
-#load npy file
-U = np.load("vi_policy_real.npy", allow_pickle=True)
+# #load npy file
+# U = np.load("vi_policy_real.npy", allow_pickle=True)
 
-vec_env = model.get_env()
-obs = vec_env.reset()
+# vec_env = model.get_env()
+# obs = vec_env.reset()
 
 theta = np.linspace(-np.pi, np.pi, 100)
 # print(theta)
@@ -146,60 +157,121 @@ plt.colorbar()
 plt.savefig("sac_pendulum.png")
 plt.show()
 
+vec_env = model.get_env()
 
-obs = vec_env.reset()
+while True:
+    obs = vec_env.reset()
+    for i in range(200):
+        action, _state = model.predict(obs, deterministic=True)
+        obs, reward, done, info = vec_env.step(action)
+        vec_env.render("human")
+
+
+
+
+# exponential distribution of m
+m_array = np.linspace(0.1, 5.0, 10)
+print(m_array)
+max_torque_array = m_array * 4
+
+# 2d array to store the score
+score_array = []
+ratio_array = np.zeros((len(m_array), len(max_torque_array)))
+
+
+for k, max_torque in enumerate(max_torque_array):
+    score = []
+    for j, m in enumerate(m_array):
+        env.unwrapped.m = m
+        env.unwrapped.max_torque = max_torque
+
+
+        model = SAC.load("sac_pendulum", env=env)
+
+        vec_env = model.get_env()
+
+        ratio_array[j, k] = env.unwrapped.m / env.unwrapped.max_torque
+
+        obs = vec_env.reset()
+        obs_array = []
+        state_array = []
+        ep_reward = 0
+
+        n_steps = 200
+
+        for i in range(n_steps):
+            action, _state = model.predict(obs, deterministic=True)
+            obs, reward, done, info = vec_env.step(action)
+            # vec_env.render("human")
+
+            reward = env.dimensionless_cost(action) 
+            # VecEnv resets automatically
+            ep_reward += reward
+            obs_array.append(obs)
+            state_array.append([np.arctan2(obs[0][1], obs[0][0]), obs[0][2]])
+
+            if done:
+                break
+
+
+        # print reward of the episode in percentage
+        print("Episode reward:", ep_reward/n_steps * 100)
+        score.append(ep_reward/n_steps * 100)
+
+        obs_array = []
+        state_array = []
+        obs = vec_env.reset()
+        ep_reward = 0
+
+    score_array.append(score)
+
+
+# plot the reward in 3d
+
+score_array = np.array(score_array)
+print(score_array.shape)
+print(score_array)
+
+
+plt.figure()
+X, Y = np.meshgrid(m_array, max_torque_array)
+Z = np.log(np.squeeze(np.array(ratio_array)))
+plt.pcolormesh(X, Y, Z, shading='auto')
+plt.xlabel("mgl")
+plt.ylabel("max_torque")
+plt.colorbar()
+
+plt.figure()
+X, Y = np.meshgrid(m_array, max_torque_array)
+print(X, Y)
+Z = np.squeeze(np.array(score_array))
+plt.pcolormesh(X, Y, Z, shading='auto')
+plt.xlabel("mgl")
+plt.ylabel("max_torque")
+plt.colorbar()
+plt.show()
+
+
+
+# env.max_torque = 8.0
+# # env.l = 0.42
+# # env.m = 0.8
+# env.l = 2.0
+# env.m = 2.0
+
+
+model = SAC.load("sac_pendulum", env=env)
+
+vec_env = model.get_env()
 obs_array = []
 state_array = []
 ep_reward = 0
 
-n_steps = 250
-
-theta_max = 10
-theta_dot_max = 10
-theta_min = -10
-theta_dot_min = -10
+n_steps = 200
 
 while True:
-    for _ in range(n_steps):
+    obs = vec_env.reset()
+    for i in range(n_steps):
         action, _state = model.predict(obs, deterministic=True)
-        # select action from the value iteration policy and interpolate on the action space
-        th_normalized = angle_normalize(np.arctan2(obs[0][1], obs[0][0]) + np.pi) 
-        th_idx = np.argmin(np.abs(theta - th_normalized))
-        ths_idx = np.argmin(np.abs(theta_dot - obs[0][2]))
-        # print(th_normalized, obs[0][2])
-        # print(th_idx, ths_idx)
-
-        # action = np.array([[U[ths_idx, th_idx]]])
-        # print(action)
         obs, reward, done, info = vec_env.step(action)
         vec_env.render("human")
-
-        reward = env.dimensionless_cost(action)
-        # VecEnv resets automatically
-        ep_reward += reward
-        obs_array.append(obs)
-        state_array.append([np.arctan2(obs[0][1], obs[0][0]), obs[0][2]])
-        # state_array = np.append(state_array, [np.arctan2(obs[0][1], obs[0][0]), obs[0][2]].T)
-
-
-    # plot coordinate trajectory
-    # obs_array = np.array(obs_array).T
-    # plt.figure()
-    # plt.plot(obs_array[0], obs_array[1], "r.")
-    # plt.pause(0.01)
-    # plt.show()
-
-    # # plot state space trajectory
-    # state_array = np.array(state_array).T
-    # plt.figure()
-    # plt.plot(state_array[0], state_array[1], "r.")
-    # plt.pause(0.01)
-    # plt.show()
-
-    # print reward of the episode in percentage
-    print("Episode reward:", ep_reward/n_steps * 100)
-
-    obs_array = []
-    state_array = []
-    obs = vec_env.reset()
-    ep_reward = 0

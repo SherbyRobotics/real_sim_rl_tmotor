@@ -29,7 +29,7 @@ class TMotorsEnv(gym.Env):
 
         self.render_mode = render_mode
 
-    def _get_obs(self):
+    def get_obs(self):
         y = np.cos(self._node.joint_state[0])
         x = np.sin(self._node.joint_state[0])
         return np.array([y, x, self._node.joint_state[1]])
@@ -45,7 +45,7 @@ class TMotorsEnv(gym.Env):
     def set_joints(self, position):
         self._node.send_cmd(PositionCmd(position))
 
-    def _apply_torque(self, tau):
+    def apply_torque(self, tau):
         self._node.send_cmd(TorqueCmd(tau))
 
     def _node_spin(self, node):
@@ -60,7 +60,7 @@ class TMotorsEnv(gym.Env):
         if self.render_mode == "ansi":
             print("Reset")
 
-        self._apply_torque(0.0)
+        self.apply_torque(0.0)
         time.sleep(3)  # TODO: remove hardcode
         self._enable_motors()
         time.sleep(5) 
@@ -68,16 +68,16 @@ class TMotorsEnv(gym.Env):
         # self._set_joints(np.random.uniform(0, 2*np.pi))
         # time.sleep(3) 
 
-        obs = self._get_obs()
+        obs = self.get_obs()
         info = self._get_info()
 
         return obs, info
 
     def step(self, action):
         tau = action[0]
-        self._apply_torque(float(tau))
+        self.apply_torque(float(tau))
         time.sleep(0.05)  # TODO: remove hardcode
-        obs = self._get_obs()
+        obs = self.get_obs()
         info = self._get_info()
 
         th = self._node.joint_state[0]
@@ -179,6 +179,21 @@ if __name__ == "__main__":
 
     ep_reward = 0
     n_steps = 250
+
+    # measure the time it takes for an input to change the output 
+    for _ in range(10):
+        obs , info = env.reset()
+        time.sleep(0.01)
+        obs , info = env.reset()
+        t = time.time()
+        env.apply_torque(1.)
+        while abs(obs[2]) < 0.1 :
+            obs = env.get_obs()
+            env.apply_torque(1.)        
+            print(obs)
+
+        print(time.time() - t)
+
 
     while True:
         obs , info = env.reset()

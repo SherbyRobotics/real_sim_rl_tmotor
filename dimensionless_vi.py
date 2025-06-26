@@ -119,7 +119,7 @@ env.dt = 0.05
 model = SAC.load("sac_pendulum_adim", env=env)
 
 #load npy file
-U = np.load("vi_policy.npy", allow_pickle=True)
+U = np.load("vi_policy_test.npy", allow_pickle=True)
 theta = np.linspace(-np.pi, np.pi, 100)
 theta_dot = np.linspace(-10, 10, 100)
 
